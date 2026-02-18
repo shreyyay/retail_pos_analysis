@@ -1,0 +1,141 @@
+## ERPNext Local Development Setup (x86_64)
+## Usage: cd deployment/erpnext && docker compose -f docker-compose.local.yml up -d
+
+x-backend-defaults: &backend_defaults
+  image: frappe/erpnext:v16
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
+services:
+  db:
+    image: mariadb:10.6
+    healthcheck:
+      test: mysqladmin ping -h localhost --password=${DB_PASSWORD:-admin}
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  redis-queue:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  configurator:
+    <<: *backend_defaults
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://redis-cache:6379";
+        bench set-config -g redis_queue "redis://redis-queue:6379";
+        bench set-config -g redis_socketio "redis://redis-queue:6379";
+        bench set-config -gp socketio_port 9000;
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+
+  create-site:
+    <<: *backend_defaults
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        wait-for-it -t 120 db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        export start=$$(date +%s);
+        until [[ -n $$(bench --site all list-apps 2>/dev/null | grep -i erpnext) ]] || [[ $$(( $$(date +%s) - start )) -gt 300 ]]; do
+          bench new-site --no-mariadb-socket --mariadb-root-password ${DB_PASSWORD:-admin} --install-app erpnext --set-default --admin-password ${ADMIN_PASSWORD:-admin} ${SITE_NAME:-erp.localhost} && break;
+          sleep 5;
+        done;
+        bench --site ${SITE_NAME:-erp.localhost} set-config developer_mode 0;
+        bench --site ${SITE_NAME:-erp.localhost} clear-cache;
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  backend:
+    <<: *backend_defaults
+    restart: unless-stopped
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  frontend:
+    image: frappe/erpnext:v16
+    command: ["nginx-entrypoint.sh"]
+    restart: unless-stopped
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-erp.localhost}
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_started
+      websocket:
+        condition: service_started
+
+  websocket:
+    <<: *backend_defaults
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    restart: unless-stopped
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  queue-short:
+    <<: *backend_defaults
+    command: bench worker --queue short,default
+    restart: unless-stopped
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  queue-long:
+    <<: *backend_defaults
+    command: bench worker --queue long
+    restart: unless-stopped
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  scheduler:
+    <<: *backend_defaults
+    command: bench schedule
+    restart: unless-stopped
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
+  sites:
+  logs:

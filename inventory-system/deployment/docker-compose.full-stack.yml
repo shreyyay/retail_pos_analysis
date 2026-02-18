@@ -1,0 +1,181 @@
+## Full Stack Deployment: ERPNext + Inventory System
+## Deploy everything on a single Oracle Cloud VM
+##
+## Usage:
+##   cd deployment
+##   docker compose -f docker-compose.full-stack.yml up -d
+
+x-erpnext-defaults: &erpnext_defaults
+  image: frappe/erpnext:v16
+  platform: linux/arm64
+  volumes:
+    - erpnext-sites:/home/frappe/frappe-bench/sites
+    - erpnext-logs:/home/frappe/frappe-bench/logs
+
+services:
+  # ============================================================
+  # ERPNext Services
+  # ============================================================
+  db:
+    image: mariadb:10.6
+    platform: linux/arm64
+    healthcheck:
+      test: mysqladmin ping -h localhost --password=${DB_PASSWORD:-admin}
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --skip-innodb-read-only-compressed
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-admin}
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis-cache:
+    image: redis:7-alpine
+    platform: linux/arm64
+    restart: unless-stopped
+
+  redis-queue:
+    image: redis:7-alpine
+    platform: linux/arm64
+    restart: unless-stopped
+
+  erpnext-configurator:
+    <<: *erpnext_defaults
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache "redis://redis-cache:6379";
+        bench set-config -g redis_queue "redis://redis-queue:6379";
+        bench set-config -g redis_socketio "redis://redis-queue:6379";
+        bench set-config -gp socketio_port 9000;
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+
+  erpnext-create-site:
+    <<: *erpnext_defaults
+    restart: "no"
+    entrypoint: ["bash", "-c"]
+    command:
+      - >
+        wait-for-it -t 120 db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        export start=$$(date +%s);
+        until [[ -n $$(bench --site all list-apps 2>/dev/null | grep -i erpnext) ]] || [[ $$(( $$(date +%s) - start )) -gt 300 ]]; do
+          bench new-site --no-mariadb-socket --mariadb-root-password ${DB_PASSWORD:-admin} --install-app erpnext --set-default --admin-password ${ADMIN_PASSWORD:-admin} ${SITE_NAME:-erp.localhost} && break;
+          sleep 5;
+        done;
+        bench --site ${SITE_NAME:-erp.localhost} set-config developer_mode 0;
+        bench --site ${SITE_NAME:-erp.localhost} clear-cache;
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  erpnext-backend:
+    <<: *erpnext_defaults
+    restart: unless-stopped
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  erpnext-frontend:
+    image: frappe/erpnext:v16
+    platform: linux/arm64
+    command: ["nginx-entrypoint.sh"]
+    restart: unless-stopped
+    environment:
+      BACKEND: erpnext-backend:8000
+      SOCKETIO: erpnext-websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-erp.localhost}
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
+    volumes:
+      - erpnext-sites:/home/frappe/frappe-bench/sites
+      - erpnext-logs:/home/frappe/frappe-bench/logs
+    ports:
+      - "8080:8080"
+    depends_on:
+      - erpnext-backend
+      - erpnext-websocket
+
+  erpnext-websocket:
+    <<: *erpnext_defaults
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    restart: unless-stopped
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  erpnext-queue-short:
+    <<: *erpnext_defaults
+    command: bench worker --queue short,default
+    restart: unless-stopped
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  erpnext-queue-long:
+    <<: *erpnext_defaults
+    command: bench worker --queue long
+    restart: unless-stopped
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  erpnext-scheduler:
+    <<: *erpnext_defaults
+    command: bench schedule
+    restart: unless-stopped
+    depends_on:
+      erpnext-configurator:
+        condition: service_completed_successfully
+
+  # ============================================================
+  # Inventory System Services
+  # ============================================================
+  inventory-backend:
+    build: ../backend
+    ports:
+      - "8000:8000"
+    environment:
+      ERPNEXT_URL: http://erpnext-frontend:8080
+      ERPNEXT_API_KEY: ${ERPNEXT_API_KEY:-}
+      ERPNEXT_API_SECRET: ${ERPNEXT_API_SECRET:-}
+      LANGEXTRACT_API_KEY: ${LANGEXTRACT_API_KEY:-}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      DEFAULT_WAREHOUSE: ${DEFAULT_WAREHOUSE:-Stores - My Company}
+      DEFAULT_COMPANY: ${DEFAULT_COMPANY:-My Company}
+    volumes:
+      - invoice-uploads:/tmp/invoice_uploads
+    restart: unless-stopped
+    depends_on:
+      - erpnext-frontend
+
+  inventory-frontend:
+    build: ../frontend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+    depends_on:
+      - inventory-backend
+
+volumes:
+  db-data:
+  erpnext-sites:
+  erpnext-logs:
+  invoice-uploads:

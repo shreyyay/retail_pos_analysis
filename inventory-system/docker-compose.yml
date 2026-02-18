@@ -1,0 +1,27 @@
+## Inventory System - Standalone Deployment
+## Use this when ERPNext is already running separately (e.g., on Oracle Cloud)
+## For full-stack (ERPNext + Inventory), use deployment/docker-compose.full-stack.yml
+
+services:
+  inventory-backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - invoice_uploads:/tmp/invoice_uploads
+      - pos_data:/app/data
+    restart: unless-stopped
+
+  inventory-frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - inventory-backend
+    restart: unless-stopped
+
+volumes:
+  invoice_uploads:
+  pos_data:
