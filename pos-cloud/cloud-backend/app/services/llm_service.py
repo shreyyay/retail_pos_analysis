@@ -1,8 +1,8 @@
-"""LLM text-to-SQL pipeline using Claude Haiku."""
+"""LLM text-to-SQL pipeline using Groq + Llama 3.1 70B."""
 import re
 import logging
 
-import anthropic
+from groq import Groq
 
 from app.config import settings
 from app.database import get_raw_connection
@@ -71,19 +71,19 @@ def _inject_store_filter(sql: str, store_id: str) -> str:
 
 
 def ask_insight(question: str, store_id: str) -> dict:
-    client = anthropic.Anthropic(api_key=settings.CLAUDE_API_KEY)
+    client = Groq(api_key=settings.GROQ_API_KEY)
 
     # Step 1: question → SQL
     sql_prompt = (
         f"{LLM_SCHEMA}\n{SAFETY_RULES}\n\n"
         f"Question: {question}\n\nSQL:"
     )
-    sql_msg = client.messages.create(
-        model=settings.CLAUDE_MODEL,
+    sql_msg = client.chat.completions.create(
+        model=settings.GROQ_MODEL,
         max_tokens=512,
         messages=[{"role": "user", "content": sql_prompt}],
     )
-    raw_sql = sql_msg.content[0].text.strip()
+    raw_sql = sql_msg.choices[0].message.content.strip()
 
     if raw_sql.upper() == "CANNOT_ANSWER":
         return {"question": question, "answer": "I can't answer that with the available data.", "sql_used": None, "data": []}
@@ -115,12 +115,12 @@ def ask_insight(question: str, store_id: str) -> dict:
         "Provide a concise, friendly answer in 1-3 sentences. Use ₹ for currency. "
         "Round numbers sensibly. Refer to 'your store' not 'the store'."
     )
-    ans_msg = client.messages.create(
-        model=settings.CLAUDE_MODEL,
+    ans_msg = client.chat.completions.create(
+        model=settings.GROQ_MODEL,
         max_tokens=300,
         messages=[{"role": "user", "content": answer_prompt}],
     )
-    answer = ans_msg.content[0].text.strip()
+    answer = ans_msg.choices[0].message.content.strip()
 
     return {"question": question, "answer": answer, "sql_used": raw_sql, "data": rows}
 

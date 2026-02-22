@@ -3,8 +3,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://posuser:changeme@postgres:5432/posdb"
-    CLAUDE_API_KEY: str = ""
-    CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.1-70b-versatile"
     APP_ENV: str = "production"
 
     class Config:
