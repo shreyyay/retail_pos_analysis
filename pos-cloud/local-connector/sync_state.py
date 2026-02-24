@@ -1,8 +1,13 @@
-import json, os
+import json, os, sys
 from datetime import date, timedelta
 import config as cfg
 
-_STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "last_sync.json")
+# Use sys.executable dir when frozen as .exe, __file__ dir when running as script
+if getattr(sys, 'frozen', False):
+    _BASE = os.path.dirname(sys.executable)
+else:
+    _BASE = os.path.dirname(os.path.abspath(__file__))
+_STATE_PATH = os.path.join(_BASE, "last_sync.json")
 
 
 def get_from_date() -> date:

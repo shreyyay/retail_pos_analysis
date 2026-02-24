@@ -1,9 +1,13 @@
 """Nightly Tally → Cloud sync orchestrator. Run via run_sync.bat."""
 import logging, os, sys
 from datetime import date, datetime, timedelta
-import cloud_client, config as cfg, sync_state, tally_client, transformer
+import supabase_client as cloud_client, config as cfg, sync_state, tally_client, transformer
 
-_LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
+if getattr(sys, 'frozen', False):
+    _BASE = os.path.dirname(sys.executable)
+else:
+    _BASE = os.path.dirname(os.path.abspath(__file__))
+_LOG_DIR = os.path.join(_BASE, "logs")
 os.makedirs(_LOG_DIR, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
