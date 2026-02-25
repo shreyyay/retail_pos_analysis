@@ -3,10 +3,15 @@ host = localhost
 port = 9000
 
 [supabase]
-; Paste the "Session mode" connection string from Supabase → Settings → Database
-db_url = postgresql://postgres.fjjqkxemjrkzhgahubyc:Ph9981281289Ph@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
+; Paste the "Session mode" connection string from Supabase → Connect → Session pooler
+db_url = postgresql://postgres.YOUR_PROJECT_REF:YOUR_PASSWORD@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
 store_id = STORE001
 
 [sync]
 initial_lookback_days = 7
 max_days_per_sync = 30
+
+[groq]
+; Get a free API key at https://console.groq.com → API Keys → Create API Key
+api_key = gsk_your_groq_api_key_here
+model = llama-3.3-70b-versatile

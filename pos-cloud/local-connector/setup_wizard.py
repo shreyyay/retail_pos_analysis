@@ -104,23 +104,35 @@ class _Page(tk.Frame):
 class PageConfig(_Page):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
-        self._label("Step 1 of 3 — Supabase Connection", 13, bold=True).pack(pady=(20, 4))
-        self._label("Copy the Database URL from: Supabase → Settings → Database → Connection string → Session",
-                    9, fg="#a6adc8").pack(pady=(0, 16))
+        self._label("Step 1 of 3 — Enter Your Details", 13, bold=True).pack(pady=(12, 2))
+        self._label("Fill in all fields below, then click Next.",
+                    9, fg="#a6adc8").pack(pady=(0, 8))
 
-        self._label("Supabase Database URL").pack(anchor="w")
+        # Supabase URL
+        self._label("Supabase Database URL", 10, bold=True).pack(anchor="w")
+        self._label("Supabase → Connect → Session pooler → copy the connection string",
+                    8, fg="#a6adc8").pack(anchor="w")
         self.db_url = self._entry()
-        self.db_url.pack(fill="x", pady=(2, 12))
+        self.db_url.pack(fill="x", pady=(2, 8))
         self.db_url.insert(0, "postgresql://postgres:PASSWORD@db.XXXX.supabase.co:5432/postgres")
 
-        self._label("Store ID").pack(anchor="w")
+        # Store ID
+        self._label("Store ID  (short name for this shop, no spaces)", 10, bold=True).pack(anchor="w")
         self.store_id = self._entry()
-        self.store_id.pack(fill="x", pady=(2, 12))
+        self.store_id.pack(fill="x", pady=(2, 8))
         self.store_id.insert(0, "STORE001")
 
-        self._label("Tally Port (default: 9000)", 9, fg="#a6adc8").pack(anchor="w")
+        # Groq AI Key
+        self._label("Groq AI Key  (for reading supplier PDF bills)", 10, bold=True).pack(anchor="w")
+        self._label("Get a free key at: console.groq.com → API Keys → Create",
+                    8, fg="#a6adc8").pack(anchor="w")
+        self.groq_key = self._entry(show="*")
+        self.groq_key.pack(fill="x", pady=(2, 8))
+
+        # Tally port (de-emphasised)
+        self._label("Tally Port  (leave as 9000 unless changed)", 8, fg="#a6adc8").pack(anchor="w")
         self.tally_port = self._entry()
-        self.tally_port.pack(fill="x", pady=(2, 20))
+        self.tally_port.pack(fill="x", pady=(2, 12))
         self.tally_port.insert(0, "9000")
 
         self._button("Next → Test Connection", self._next).pack(side="right")
@@ -128,6 +140,7 @@ class PageConfig(_Page):
     def _next(self):
         db_url   = self.db_url.get().strip()
         store_id = self.store_id.get().strip().upper()
+        groq_key = self.groq_key.get().strip()
         port     = self.tally_port.get().strip()
 
         if not db_url or db_url.startswith("postgresql://postgres:PASSWORD"):
@@ -136,13 +149,21 @@ class PageConfig(_Page):
         if not store_id:
             messagebox.showerror("Missing", "Please enter a Store ID (e.g. STORE001).")
             return
+        if not groq_key or not groq_key.startswith("gsk_"):
+            messagebox.showerror(
+                "Missing Groq Key",
+                "Please enter your Groq AI key.\n\n"
+                "It starts with 'gsk_'.\n"
+                "Get one free at: console.groq.com → API Keys → Create"
+            )
+            return
         if not port.isdigit():
             messagebox.showerror("Invalid", "Tally port must be a number.")
             return
 
-        # Store values on controller for use by later pages
         self.controller._db_url   = db_url
         self.controller._store_id = store_id
+        self.controller._groq_key = groq_key
         self.controller._port     = port
         self.controller.show(PageTest)
 
@@ -219,11 +240,12 @@ class PageSchedule(_Page):
     def _install(self):
         c = self.controller
 
-        # 1. Write config.ini
+        # 1. Write config.ini (includes Groq key)
         cfg = configparser.ConfigParser()
         cfg["tally"]    = {"host": "localhost", "port": c._port}
         cfg["supabase"] = {"db_url": c._db_url, "store_id": c._store_id}
         cfg["sync"]     = {"initial_lookback_days": "7", "max_days_per_sync": "30"}
+        cfg["groq"]     = {"api_key": c._groq_key, "model": "llama-3.3-70b-versatile"}
         try:
             with open(_CONFIG_PATH, "w") as f:
                 cfg.write(f)
@@ -232,7 +254,7 @@ class PageSchedule(_Page):
             self._log(f"✗  Failed to write config.ini: {e}", ERROR)
             return
 
-        # 2. Create 3 scheduled tasks
+        # 2. Create 3 scheduled tasks (Tally sync)
         exe = _SYNC_EXE if os.path.exists(_SYNC_EXE) else os.path.join(_INSTALL_DIR, "tally_sync.exe")
         all_ok = True
         for time_str, task_name in SYNC_TIMES:
@@ -256,6 +278,35 @@ class PageSchedule(_Page):
                 self._log(f"✗  Task {task_name}: {e}", ERROR)
                 all_ok = False
 
+        # 3. Create Desktop shortcut for Supplier Bill Tool (launcher.pyw)
+        try:
+            launcher_path = os.path.join(_INSTALL_DIR, "launcher.pyw")
+            pythonw_path  = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+            if not os.path.exists(pythonw_path):
+                pythonw_path = sys.executable  # fallback
+
+            desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+            shortcut_path = os.path.join(desktop, "Supplier Bill Tool.lnk")
+
+            # Use VBScript to create the shortcut (works on all Windows versions)
+            vbs = (
+                f'Set sh = WScript.CreateObject("WScript.Shell")\n'
+                f'Set lnk = sh.CreateShortcut("{shortcut_path}")\n'
+                f'lnk.TargetPath = "{pythonw_path}"\n'
+                f'lnk.Arguments = """{launcher_path}"""\n'
+                f'lnk.WorkingDirectory = "{_INSTALL_DIR}"\n'
+                f'lnk.Description = "Open Supplier Bill Tool"\n'
+                f'lnk.Save\n'
+            )
+            vbs_path = os.path.join(_INSTALL_DIR, "_create_shortcut.vbs")
+            with open(vbs_path, "w") as f:
+                f.write(vbs)
+            subprocess.run(["cscript", "//nologo", vbs_path], capture_output=True)
+            os.remove(vbs_path)
+            self._log("✓  Desktop shortcut created: Supplier Bill Tool")
+        except Exception as e:
+            self._log(f"  (Shortcut creation skipped: {e})", "#a6adc8")
+
         if all_ok:
             self._log("\nSetup complete! Click Finish.", SUCCESS)
             self.done_btn.configure(state="normal", bg=BTN_BG, fg=BTN_FG)
@@ -266,18 +317,19 @@ class PageSchedule(_Page):
 class PageDone(_Page):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
-        self._label("🎉  Setup Complete!", 16, bold=True, fg=SUCCESS).pack(pady=(30, 10))
+        self._label("🎉  Setup Complete!", 16, bold=True, fg=SUCCESS).pack(pady=(20, 8))
         self._label(
-            "TallySync is installed and scheduled.\n\n"
-            "Sync will run automatically:\n"
-            "  • 11:00 AM every day\n"
-            "  •  3:00 PM every day\n"
-            "  •  6:00 PM every day\n\n"
-            "To run a sync manually, double-click tally_sync.exe\n"
-            "or use the Start Menu shortcut.",
+            "TallySync is installed and ready.\n\n"
+            "Daily sales data will sync automatically:\n"
+            "  • 11:00 AM  •  3:00 PM  •  6:00 PM\n\n"
+            "To add a supplier bill to Tally:\n"
+            "  • Double-click  \"Supplier Bill Tool\"  on your Desktop\n"
+            "  • A browser tab opens — drop the PDF, check details,\n"
+            "    and click  Save to Tally\n\n"
+            "That's it! No more manual data entry.",
             10, fg=FG,
-        ).pack(pady=10)
-        self._button("Close", controller.destroy).pack(pady=20)
+        ).pack(pady=8, padx=10, anchor="w")
+        self._button("Close", controller.destroy).pack(pady=16)
 
 
 if __name__ == "__main__":

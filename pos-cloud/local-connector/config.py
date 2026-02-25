@@ -13,3 +13,6 @@ STORE_ID: str = _cfg.get("supabase", "store_id")
 
 INITIAL_LOOKBACK_DAYS: int = int(_cfg.get("sync", "initial_lookback_days", fallback="7"))
 MAX_DAYS_PER_SYNC: int = int(_cfg.get("sync", "max_days_per_sync", fallback="30"))
+
+GROQ_API_KEY: str = _cfg.get("groq", "api_key", fallback="")
+GROQ_MODEL: str   = _cfg.get("groq", "model", fallback="llama-3.3-70b-versatile")
