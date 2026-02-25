@@ -4,7 +4,7 @@ port = 9000
 
 [supabase]
 ; Paste the "Session mode" connection string from Supabase → Settings → Database
-db_url = postgresql://postgres:your-password@db.xxxxxxxxxxxx.supabase.co:5432/postgres
+db_url = postgresql://postgres.fjjqkxemjrkzhgahubyc:Ph9981281289Ph@aws-1-ap-northeast-2.pooler.supabase.com:5432/postgres
 store_id = STORE001
 
 [sync]
