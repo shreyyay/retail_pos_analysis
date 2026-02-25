@@ -1,0 +1,12 @@
+# Credentials — never commit these
+local-connector/config.ini
+streamlit-app/.streamlit/secrets.toml
+
+# PyInstaller build artifacts
+local-connector/build/
+local-connector/dist/
+local-connector/installer/Output/
+
+# Runtime files generated on the client machine
+local-connector/last_sync.json
+local-connector/logs/

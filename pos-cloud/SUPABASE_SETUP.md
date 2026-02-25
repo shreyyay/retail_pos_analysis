@@ -118,7 +118,17 @@ ALTER TABLE followup             DISABLE ROW LEVEL SECURITY;
 
 ## Part 5 — Configure the Local Connector
 
-Open `pos-cloud/local-connector/config.ini` and replace the placeholder values:
+`config.ini` contains your database password so it is **excluded from git** (listed in `.gitignore`).
+A safe template `config.ini.example` is committed instead.
+
+**On the Tally PC (or for local testing):**
+
+1. Copy the template to create the real config file:
+   ```
+   copy config.ini.example config.ini
+   ```
+
+2. Open `config.ini` and fill in your actual values:
 
 ```ini
 [tally]
@@ -134,8 +144,12 @@ initial_lookback_days = 7
 max_days_per_sync = 30
 ```
 
-- `db_url` → the Session mode connection string from Step 4
+- `db_url` → paste the Session pooler connection string from Part 4, with your real password
 - `store_id` → must match exactly what you inserted in Part 2 (e.g. `STORE001`)
+
+> **Note:** If using the `.exe` installer, the **setup wizard handles this automatically** — it writes
+> `config.ini` directly on the client's machine during setup. You never need to touch `config.ini` manually
+> on client PCs.
 
 ### Test the connection
 
