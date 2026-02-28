@@ -77,6 +77,10 @@ def _friendly_error(msg: str) -> str:
         return "Tally Prime is not open. Please open Tally first and try again."
     if "timeout" in lo:
         return "Tally is taking too long to respond. Make sure Tally is not busy."
+    if "stock item" in lo or ("does not exist" in lo and "ledger" not in lo):
+        return (f"A product in this bill doesn't exist in Tally yet. "
+                f"Please click **Try Again** — it should fix itself automatically. "
+                f"If it keeps failing, create the product in Tally first.\n\n_{msg}_")
     if "ledger" in lo or "not found" in lo:
         return (f"Tally could not find one of the accounts. "
                 f"The supplier may need to be created in Tally first.\n\n_{msg}_")
@@ -268,6 +272,7 @@ for uploaded in uploaded_files:
                 continue
 
             with st.spinner("Saving to Tally…"):
+                tally_importer.ensure_stock_items(invoice.get("items", []))
                 result = tally_importer.post_to_tally(xml)
 
             st.session_state[result_key] = result

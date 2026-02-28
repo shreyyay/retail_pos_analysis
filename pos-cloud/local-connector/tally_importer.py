@@ -137,6 +137,55 @@ def build_purchase_xml(invoice: dict) -> str:
     return "\n".join(lines)
 
 
+# ── Stock Item auto-creation ──────────────────────────────────────────────────
+
+def build_stockitems_xml(items: list) -> str:
+    """
+    Build a Tally XML envelope that creates each item as a Stock Item master.
+    Safe to send even if items already exist — Tally returns a non-fatal error
+    for duplicates which ensure_stock_items() silently ignores.
+    """
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<ENVELOPE>',
+             '  <HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>',
+             '  <BODY><IMPORTDATA>',
+             '    <REQUESTDESC><REPORTNAME>All Masters</REPORTNAME></REQUESTDESC>',
+             '    <REQUESTDATA>']
+    for item in items:
+        name = _esc(str(item.get("name", "")).strip())
+        unit = _esc(item.get("unit") or "Nos")
+        if not name:
+            continue
+        lines += [
+            f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
+            f'        <STOCKITEM NAME="{name}" ACTION="Create">',
+            f'          <NAME>{name}</NAME>',
+            f'          <BASEUNITS>{unit}</BASEUNITS>',
+            f'        </STOCKITEM>',
+            f'      </TALLYMESSAGE>',
+        ]
+    lines += ['    </REQUESTDATA>', '  </IMPORTDATA></BODY>', '</ENVELOPE>']
+    return "\n".join(lines)
+
+
+def ensure_stock_items(items: list) -> None:
+    """
+    Create any missing stock items in Tally before importing a voucher.
+    Errors are silently ignored — items that already exist cause a non-fatal
+    Tally response, and connection failures will be surfaced by post_to_tally().
+    """
+    xml = build_stockitems_xml(items)
+    try:
+        requests.post(
+            config.TALLY_URL,
+            data=xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=15,
+        )
+    except Exception:
+        pass
+
+
 # ── Tally HTTP POST ───────────────────────────────────────────────────────────
 
 def post_to_tally(xml: str) -> dict:
