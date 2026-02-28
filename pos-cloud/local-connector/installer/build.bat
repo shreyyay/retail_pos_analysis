@@ -17,7 +17,7 @@ if errorlevel 1 (
 
 echo.
 echo [2/5] Building tally_sync.exe...
-pyinstaller installer\tally_sync.spec --distpath dist --workpath build\tally_sync
+python -m PyInstaller installer\tally_sync.spec --distpath dist --workpath build\tally_sync
 if errorlevel 1 (
     echo ERROR: tally_sync build failed.
     pause & exit /b 1
@@ -25,7 +25,7 @@ if errorlevel 1 (
 
 echo.
 echo [3/5] Building TallySyncSetup.exe (setup wizard)...
-pyinstaller installer\setup_wizard.spec --distpath dist --workpath build\setup_wizard
+python -m PyInstaller installer\setup_wizard.spec --distpath dist --workpath build\setup_wizard
 if errorlevel 1 (
     echo ERROR: setup_wizard build failed.
     pause & exit /b 1
@@ -34,7 +34,7 @@ if errorlevel 1 (
 echo.
 echo [4/5] Building SupplierBillTool.exe (PDF import tool)...
 echo       This step takes several minutes — streamlit has many dependencies.
-pyinstaller installer\supplier_bill_tool.spec --distpath dist --workpath build\supplier_bill_tool
+python -m PyInstaller installer\supplier_bill_tool.spec --distpath dist --workpath build\supplier_bill_tool
 if errorlevel 1 (
     echo ERROR: SupplierBillTool build failed.
     pause & exit /b 1
