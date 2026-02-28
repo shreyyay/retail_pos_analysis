@@ -32,6 +32,17 @@ for pkg in ("streamlit", "pdfplumber", "groq",
     except Exception:
         pass
 
+# ── Explicitly include streamlit's static UI assets ──────────────────────────
+# collect_all('streamlit') often misses the static/ dir in newer versions.
+# Without index.html, streamlit falls back to a Node dev server (port 3000).
+import streamlit as _st_pkg
+_st_static_src = os.path.join(os.path.dirname(_st_pkg.__file__), "static")
+if os.path.isdir(_st_static_src):
+    datas += [(_st_static_src, os.path.join("streamlit", "static"))]
+    print(f"[spec] Added streamlit static: {_st_static_src}")
+else:
+    print(f"[spec] WARNING: streamlit static dir not found at {_st_static_src}")
+
 # ── Include pdf_import_app.py as a data file ─────────────────────────────────
 # The worker subprocess copies it from sys._MEIPASS to a temp path and runs it.
 datas += [(os.path.join(SRC, "pdf_import_app.py"), ".")]
@@ -65,7 +76,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[os.path.join("installer", "rthook_streamlit.py")],
     excludes=["matplotlib"],
     noarchive=True,   # keeps __file__ as real disk paths so streamlit finds its static assets
 )
