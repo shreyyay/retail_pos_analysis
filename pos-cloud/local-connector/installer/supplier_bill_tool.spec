@@ -35,13 +35,21 @@ for pkg in ("streamlit", "pdfplumber", "groq",
 # ── Explicitly include streamlit's static UI assets ──────────────────────────
 # collect_all('streamlit') often misses the static/ dir in newer versions.
 # Without index.html, streamlit falls back to a Node dev server (port 3000).
+# _STATIC_PATH in server.py = Path(__file__).parent.parent/"static"
+# = streamlit/web/static/  (NOT streamlit/static/).
+# We find the actual directory containing index.html dynamically.
 import streamlit as _st_pkg
-_st_static_src = os.path.join(os.path.dirname(_st_pkg.__file__), "static")
-if os.path.isdir(_st_static_src):
-    datas += [(_st_static_src, os.path.join("streamlit", "static"))]
-    print(f"[spec] Added streamlit static: {_st_static_src}")
-else:
-    print(f"[spec] WARNING: streamlit static dir not found at {_st_static_src}")
+import pathlib as _pl
+_st_pkg_dir = _pl.Path(_st_pkg.__file__).parent  # site-packages/streamlit/
+_found_static = False
+for _idx in _st_pkg_dir.rglob("static/index.html"):
+    _static_dir = _idx.parent          # e.g. streamlit/web/static/
+    _rel = _static_dir.relative_to(_st_pkg_dir.parent)  # relative to site-packages/
+    datas += [(str(_static_dir), str(_rel).replace("\\", "/"))]
+    print(f"[spec] Added streamlit static: {_static_dir}  ->  {_rel}")
+    _found_static = True
+if not _found_static:
+    print("[spec] WARNING: streamlit static/index.html not found — UI will be broken")
 
 # ── Include pdf_import_app.py as a data file ─────────────────────────────────
 # The worker subprocess copies it from sys._MEIPASS to a temp path and runs it.
