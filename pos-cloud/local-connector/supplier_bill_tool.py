@@ -25,15 +25,20 @@ if _WORKER_FLAG in sys.argv:
     idx = sys.argv.index(_WORKER_FLAG)
     _app_script = sys.argv[idx + 1]
 
-    sys.argv = [
-        "streamlit", "run", _app_script,
-        "--server.headless", "true",
-        "--server.port", "8501",
-        "--browser.gatherUsageStats", "false",
-    ]
-
-    from streamlit.web import cli as stcli
-    sys.exit(stcli.main())
+    # Bypass streamlit's click CLI (unreliable in frozen bundles).
+    # Call the internal bootstrap directly — same thing click calls after parsing.
+    from streamlit.web.bootstrap import run as _st_run
+    _st_run(
+        main_script_path=_app_script,
+        command_line="",
+        args=[],
+        flag_options={
+            "server.headless": True,
+            "server.port": 8501,
+            "browser.gatherUsageStats": False,
+        },
+    )
+    sys.exit(0)
 
 # ── Launcher GUI mode ──────────────────────────────────────────────────────────
 
