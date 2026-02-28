@@ -67,7 +67,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=["matplotlib"],
-    noarchive=False,
+    noarchive=True,   # keeps __file__ as real disk paths so streamlit finds its static assets
 )
 
 pyz = PYZ(a.pure)
