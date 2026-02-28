@@ -265,7 +265,8 @@ for uploaded in uploaded_files:
             disabled=not invoice.get("supplier_name"),
         ):
             try:
-                xml = tally_importer.build_purchase_xml(invoice)
+                xml     = tally_importer.build_purchase_xml(invoice, with_inventory=True)
+                xml_acc = tally_importer.build_purchase_xml(invoice, with_inventory=False)
             except Exception as e:
                 st.error(f"Could not prepare the bill for Tally: {e}")
                 continue
@@ -273,12 +274,20 @@ for uploaded in uploaded_files:
             with st.spinner("Saving to Tally…"):
                 tally_importer.ensure_stock_items(invoice.get("items", []))
                 result = tally_importer.post_to_tally(xml)
-                # If items were just created, one immediate retry is enough
+                # If stock items still missing, retry once with inventory
                 if not result["success"] and (
                     "stock item" in result["message"].lower() or
                     "does not exist" in result["message"].lower()
                 ):
                     result = tally_importer.post_to_tally(xml)
+                # Last resort: import as pure accounting voucher (no inventory entries)
+                if not result["success"] and (
+                    "stock item" in result["message"].lower() or
+                    "does not exist" in result["message"].lower()
+                ):
+                    result = tally_importer.post_to_tally(xml_acc)
+                    if result["success"]:
+                        result["message"] += " (accounting only — stock quantities not tracked)"
 
             st.session_state[result_key] = result
             _write_log(

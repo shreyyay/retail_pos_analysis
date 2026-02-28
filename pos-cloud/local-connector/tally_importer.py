@@ -13,7 +13,7 @@ import config
 
 # ── XML Builder ───────────────────────────────────────────────────────────────
 
-def build_purchase_xml(invoice: dict) -> str:
+def build_purchase_xml(invoice: dict, with_inventory: bool = True) -> str:
     """
     Build a Tally Prime XML import envelope for a single Purchase voucher.
 
@@ -22,7 +22,10 @@ def build_purchase_xml(invoice: dict) -> str:
       Cr entry  (Supplier ledger):                        ISDEEMEDPOSITIVE=No,  AMOUNT positive
 
     Args:
-        invoice: validated dict from llm_parser.parse_invoice()
+        invoice:        validated dict from llm_parser.parse_invoice()
+        with_inventory: if True (default), include ALLINVENTORYENTRIES.LIST (requires stock items
+                        to exist in Tally).  If False, import as a pure accounting voucher
+                        (no stock item dependency — amount/GST/supplier still recorded correctly).
 
     Returns:
         XML string ready to POST to Tally's HTTP server
@@ -39,6 +42,9 @@ def build_purchase_xml(invoice: dict) -> str:
     # Base amount (before GST) = total - cgst - sgst - igst
     base_amount = total - cgst - sgst - igst
 
+    obj_view = "Invoice Voucher View" if with_inventory else "Accounting Voucher View"
+    is_invoice = "Yes" if with_inventory else "No"
+
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<ENVELOPE>',
              '  <HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>',
@@ -49,31 +55,32 @@ def build_purchase_xml(invoice: dict) -> str:
              '      </REQUESTDESC>',
              '      <REQUESTDATA>',
              '        <TALLYMESSAGE xmlns:UDF="TallyUDF">',
-             f'          <VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="Invoice Voucher View">',
+             f'          <VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="{obj_view}">',
              f'            <DATE>{inv_date}</DATE>',
              f'            <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>',
              f'            <VOUCHERNUMBER>{_esc(inv_no)}</VOUCHERNUMBER>',
              f'            <PARTYLEDGERNAME>{_esc(supplier)}</PARTYLEDGERNAME>',
-             f'            <ISINVOICE>Yes</ISINVOICE>',
+             f'            <ISINVOICE>{is_invoice}</ISINVOICE>',
              ]
 
-    # ── Inventory entries (one per item) ──────────────────────────────────────
-    for item in items:
-        name   = item["name"]
-        qty    = item["quantity"]
-        unit   = item.get("unit") or "Pcs"
-        rate   = item["rate"]
-        amount = item["amount"]
-        lines += [
-            f'            <ALLINVENTORYENTRIES.LIST>',
-            f'              <STOCKITEMNAME>{_esc(name)}</STOCKITEMNAME>',
-            f'              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>',
-            f'              <RATE>{rate:.2f}/{unit}</RATE>',
-            f'              <AMOUNT>-{amount:.2f}</AMOUNT>',
-            f'              <ACTUALQTY>{qty} {unit}</ACTUALQTY>',
-            f'              <BILLEDQTY>{qty} {unit}</BILLEDQTY>',
-            f'            </ALLINVENTORYENTRIES.LIST>',
-        ]
+    # ── Inventory entries (one per item) — skipped in accounting-only mode ────
+    if with_inventory:
+        for item in items:
+            name   = item["name"]
+            qty    = item["quantity"]
+            unit   = item.get("unit") or "Pcs"
+            rate   = item["rate"]
+            amount = item["amount"]
+            lines += [
+                f'            <ALLINVENTORYENTRIES.LIST>',
+                f'              <STOCKITEMNAME>{_esc(name)}</STOCKITEMNAME>',
+                f'              <ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE>',
+                f'              <RATE>{rate:.2f}/{unit}</RATE>',
+                f'              <AMOUNT>-{amount:.2f}</AMOUNT>',
+                f'              <ACTUALQTY>{qty} {unit}</ACTUALQTY>',
+                f'              <BILLEDQTY>{qty} {unit}</BILLEDQTY>',
+                f'            </ALLINVENTORYENTRIES.LIST>',
+            ]
 
     # ── Ledger entries ────────────────────────────────────────────────────────
 
@@ -157,8 +164,9 @@ def build_stockitems_xml(items: list) -> str:
             continue
         lines += [
             f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
-            f'        <STOCKITEM NAME="{name}" ACTION="Create">',
+            f'        <STOCKITEM NAME="{name}" ACTION="Create" ISMODIFY="No">',
             f'          <NAME>{name}</NAME>',
+            f'          <PARENT>Primary</PARENT>',
             f'          <BASEUNITS>Nos</BASEUNITS>',
             f'        </STOCKITEM>',
             f'      </TALLYMESSAGE>',
