@@ -1,9 +1,13 @@
 @echo off
 REM ============================================================
 REM  TallySync Installer Build Script
-REM  Run this on a Windows machine from the local-connector\ dir
+REM  Can be run from anywhere — double-click or call from CMD
 REM  Requires: Python 3.11+, Inno Setup 6
 REM ============================================================
+
+REM Always run from the local-connector\ directory (parent of this file)
+cd /d "%~dp0.."
+echo Working directory: %CD%
 
 echo [1/5] Installing Python build dependencies...
 pip install pyinstaller ^
