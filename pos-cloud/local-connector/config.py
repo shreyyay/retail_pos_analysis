@@ -1,6 +1,12 @@
-import configparser, os
+import configparser, os, sys
 
-_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, 'frozen', False):
+    # Frozen exe lives in {app}\subdir\ (e.g. tally_sync\ or TallySyncSetup\)
+    # config.ini is one level up in {app}\
+    _BASE_DIR = os.path.dirname(os.path.dirname(sys.executable))
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 _cfg = configparser.ConfigParser()
 _cfg.read(os.path.join(_BASE_DIR, "config.ini"))
 

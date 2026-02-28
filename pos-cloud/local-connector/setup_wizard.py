@@ -12,7 +12,9 @@ from tkinter import font, messagebox, ttk
 
 # Determine install directory (works both frozen and as script)
 if getattr(sys, 'frozen', False):
-    _INSTALL_DIR = os.path.dirname(sys.executable)
+    # TallySyncSetup.exe lives in {app}\TallySyncSetup\
+    # but config.ini and all scripts live in the parent {app}\
+    _INSTALL_DIR = os.path.dirname(os.path.dirname(sys.executable))
 else:
     _INSTALL_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -278,26 +280,40 @@ class PageSchedule(_Page):
                 self._log(f"✗  Task {task_name}: {e}", ERROR)
                 all_ok = False
 
-        # 3. Create Desktop shortcut for Supplier Bill Tool (launcher.pyw)
+        # 3. Create Desktop shortcut for Supplier Bill Tool
         try:
-            launcher_path = os.path.join(_INSTALL_DIR, "launcher.pyw")
-            pythonw_path  = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
-            if not os.path.exists(pythonw_path):
-                pythonw_path = sys.executable  # fallback
-
             desktop = os.path.join(os.path.expanduser("~"), "Desktop")
             shortcut_path = os.path.join(desktop, "Supplier Bill Tool.lnk")
 
-            # Use VBScript to create the shortcut (works on all Windows versions)
-            vbs = (
-                f'Set sh = WScript.CreateObject("WScript.Shell")\n'
-                f'Set lnk = sh.CreateShortcut("{shortcut_path}")\n'
-                f'lnk.TargetPath = "{pythonw_path}"\n'
-                f'lnk.Arguments = """{launcher_path}"""\n'
-                f'lnk.WorkingDirectory = "{_INSTALL_DIR}"\n'
-                f'lnk.Description = "Open Supplier Bill Tool"\n'
-                f'lnk.Save\n'
-            )
+            # Prefer the frozen SupplierBillTool.exe (installer mode)
+            supplier_exe = os.path.join(_INSTALL_DIR, "SupplierBillTool", "SupplierBillTool.exe")
+
+            if os.path.exists(supplier_exe):
+                # Installer mode: shortcut goes directly to SupplierBillTool.exe
+                vbs = (
+                    f'Set sh = WScript.CreateObject("WScript.Shell")\n'
+                    f'Set lnk = sh.CreateShortcut("{shortcut_path}")\n'
+                    f'lnk.TargetPath = "{supplier_exe}"\n'
+                    f'lnk.Arguments = ""\n'
+                    f'lnk.WorkingDirectory = "{os.path.dirname(supplier_exe)}"\n'
+                    f'lnk.Description = "Open Supplier Bill Tool"\n'
+                    f'lnk.Save\n'
+                )
+            else:
+                # Dev fallback: run launcher.pyw via pythonw.exe
+                launcher_path = os.path.join(_INSTALL_DIR, "launcher.pyw")
+                pythonw_path  = os.path.join(os.path.dirname(sys.executable), "pythonw.exe")
+                if not os.path.exists(pythonw_path):
+                    pythonw_path = sys.executable
+                vbs = (
+                    f'Set sh = WScript.CreateObject("WScript.Shell")\n'
+                    f'Set lnk = sh.CreateShortcut("{shortcut_path}")\n'
+                    f'lnk.TargetPath = "{pythonw_path}"\n'
+                    f'lnk.Arguments = """{launcher_path}"""\n'
+                    f'lnk.WorkingDirectory = "{_INSTALL_DIR}"\n'
+                    f'lnk.Description = "Open Supplier Bill Tool"\n'
+                    f'lnk.Save\n'
+                )
             vbs_path = os.path.join(_INSTALL_DIR, "_create_shortcut.vbs")
             with open(vbs_path, "w") as f:
                 f.write(vbs)

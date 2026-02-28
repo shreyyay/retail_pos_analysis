@@ -1,9 +1,9 @@
 ; Inno Setup 6 script for TallySync Installer
 ; Build with: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" TallySyncInstaller.iss
-; (run from the installer\ directory, after building both PyInstaller exes)
+; (run from the installer\ directory, after building all three PyInstaller exes)
 
 #define MyAppName      "TallySync"
-#define MyAppVersion   "1.0.0"
+#define MyAppVersion   "1.1.0"
 #define MyAppPublisher "Your Business Name"
 #define MyAppURL       "https://your-domain.com"
 #define MyDistDir      "..\dist"
@@ -17,7 +17,7 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-; Require admin so Task Scheduler entries can be created
+; Require admin so Task Scheduler entries can be created by the setup wizard
 PrivilegesRequired=admin
 OutputDir=Output
 OutputBaseFilename=TallySyncInstaller
@@ -29,26 +29,39 @@ UninstallDisplayIcon={app}\TallySyncSetup\TallySyncSetup.exe
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
-[Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut for 'Run Sync Now'"; GroupDescription: "Additional icons:"
-
 [Files]
-; Main sync executable directory
-Source: "{#MyDistDir}\tally_sync\*"; DestDir: "{app}\tally_sync"; Flags: ignoreversion recursesubdirs createallsubdirs
+; ── Tally sync exe (reads sales from Tally, pushes to Supabase cloud) ─────────
+Source: "{#MyDistDir}\tally_sync\*"; \
+  DestDir: "{app}\tally_sync"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Setup wizard executable directory
-Source: "{#MyDistDir}\TallySyncSetup\*"; DestDir: "{app}\TallySyncSetup"; Flags: ignoreversion recursesubdirs createallsubdirs
+; ── Setup wizard exe (collects credentials, writes config.ini, creates tasks) ──
+Source: "{#MyDistDir}\TallySyncSetup\*"; \
+  DestDir: "{app}\TallySyncSetup"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ── Supplier Bill Tool exe (PDF invoice -> Tally import, self-contained) ───────
+Source: "{#MyDistDir}\SupplierBillTool\*"; \
+  DestDir: "{app}\SupplierBillTool"; \
+  Flags: ignoreversion recursesubdirs createallsubdirs
+
+; ── Config template (placeholder only; real config.ini written by wizard) ──────
+Source: "..\config.ini.example"; \
+  DestDir: "{app}"; \
+  DestName: "config.ini.example"; \
+  Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Run Sync Now";    Filename: "{app}\tally_sync\tally_sync.exe"
-Name: "{group}\Setup TallySync"; Filename: "{app}\TallySyncSetup\TallySyncSetup.exe"
+; Start menu shortcuts
+Name: "{group}\TallySync - Sync Now";    Filename: "{app}\tally_sync\tally_sync.exe"
+Name: "{group}\TallySync - Setup";       Filename: "{app}\TallySyncSetup\TallySyncSetup.exe"
+Name: "{group}\Supplier Bill Tool";      Filename: "{app}\SupplierBillTool\SupplierBillTool.exe"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\TallySync — Run Now"; Filename: "{app}\tally_sync\tally_sync.exe"; Tasks: desktopicon
 
 [Run]
-; Launch the setup wizard automatically after installation finishes
+; Launch setup wizard automatically after installation finishes
 Filename: "{app}\TallySyncSetup\TallySyncSetup.exe"; \
-  Description: "Configure TallySync (recommended)"; \
+  Description: "Run TallySync Setup (enter your Supabase and Groq details)"; \
   Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -56,10 +69,3 @@ Filename: "{app}\TallySyncSetup\TallySyncSetup.exe"; \
 Filename: "schtasks"; Parameters: "/delete /tn TallySync_11AM /f"; Flags: runhidden; RunOnceId: "DelTask11AM"
 Filename: "schtasks"; Parameters: "/delete /tn TallySync_3PM  /f"; Flags: runhidden; RunOnceId: "DelTask3PM"
 Filename: "schtasks"; Parameters: "/delete /tn TallySync_6PM  /f"; Flags: runhidden; RunOnceId: "DelTask6PM"
-
-[Code]
-// Warn if Tally is not running on port 9000
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  // Nothing needed — setup wizard handles all configuration
-end;
