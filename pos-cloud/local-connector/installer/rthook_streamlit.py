@@ -15,40 +15,60 @@ def _patch():
 
     meipass = pathlib.Path(sys._MEIPASS)
 
-    # Find the static directory that actually contains index.html.
-    # Location varies by streamlit version:
-    #   older: streamlit/static/
-    #   newer: streamlit/web/static/
+    # ── Step 1: Find the correct static directory ──────────────────────────────
+    # In newer streamlit (1.12+), UI files live in streamlit/web/static/.
+    # In older streamlit they were in streamlit/static/.
+    # Search for web/static/index.html FIRST (more specific), then fall back.
     st_static = None
-    for candidate in meipass.rglob("static/index.html"):
+
+    # Preferred: streamlit/web/static/index.html
+    for candidate in meipass.rglob("web/static/index.html"):
         if "streamlit" in str(candidate):
             st_static = candidate.parent
-            print(f"[rthook] Found streamlit static at: {st_static}")
+            print(f"[rthook] Found streamlit web/static at: {st_static}")
             break
 
+    # Fallback: any static/index.html under the streamlit tree
     if st_static is None:
-        print(f"[rthook] ERROR: streamlit static/index.html not found anywhere under {meipass}")
-        # List what IS in the bundle under streamlit/ for diagnosis
+        for candidate in meipass.rglob("static/index.html"):
+            if "streamlit" in str(candidate):
+                st_static = candidate.parent
+                print(f"[rthook] Found streamlit static at: {st_static}")
+                break
+
+    if st_static is None:
+        print(f"[rthook] ERROR: streamlit static/index.html not found under {meipass}")
+        # List every index.html in the bundle for diagnosis
         st_dir = meipass / "streamlit"
         if st_dir.exists():
-            for p in sorted(st_dir.iterdir()):
-                print(f"[rthook]   {p.name}/")
+            found = list(st_dir.rglob("index.html"))
+            if found:
+                for p in found:
+                    print(f"[rthook]   index.html at: {p}")
+            else:
+                print(f"[rthook]   no index.html anywhere under {st_dir}")
         return
 
-    # Import server module and patch _STATIC_PATH before it is used.
-    # NOTE: any boolean cached at import time (e.g. _IS_DEV_SERVER) also
-    # needs to be reset. We patch both the variable and any derived booleans.
+    # ── Step 2: Patch server._STATIC_PATH and reset cached dev-mode flags ──────
     try:
         import streamlit.web.server.server as _srv
-        old = getattr(_srv, '_STATIC_PATH', None)
-        _srv._STATIC_PATH = st_static
-        print(f"[rthook] server._STATIC_PATH: {old} -> {st_static}")
 
-        # Reset any module-level cached boolean that was derived from _STATIC_PATH
-        # before our patch (evaluated during module import).
+        # Print __file__ so we can confirm noarchive=True is working
+        print(f"[rthook] server.py __file__           = {_srv.__file__}")
+        old = getattr(_srv, '_STATIC_PATH', None)
+        print(f"[rthook] server._STATIC_PATH (before) = {old}")
+        _srv._STATIC_PATH = st_static
+        print(f"[rthook] server._STATIC_PATH (after)  = {st_static}")
+
+        # Reset any module-level boolean cached from _STATIC_PATH at import time.
+        # e.g. _IS_DEV_SERVER = not (_STATIC_PATH / "index.html").exists()
         for _attr in dir(_srv):
-            if "dev" in _attr.lower() or "node" in _attr.lower():
-                print(f"[rthook]   found attr: {_attr} = {getattr(_srv, _attr, '?')}")
+            val = getattr(_srv, _attr, None)
+            if isinstance(val, bool) and (
+                "dev" in _attr.lower() or "node" in _attr.lower()
+            ):
+                print(f"[rthook] Resetting {_attr}: {val} -> False")
+                setattr(_srv, _attr, False)
 
     except Exception as e:
         print(f"[rthook] Could not patch server._STATIC_PATH: {e}")

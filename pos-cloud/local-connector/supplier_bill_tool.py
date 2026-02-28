@@ -37,21 +37,6 @@ if _WORKER_FLAG in sys.argv:
     _st_cfg.set_option("browser.gatherUsageStats", False)
     _st_cfg.set_option("server.address", "localhost")
 
-    # In a frozen PyInstaller bundle, __file__ paths don't resolve to real disk
-    # locations (files are packed in a .pyz archive). Streamlit uses
-    #   Path(__file__).parent / "static"
-    # to find its UI files, and falls back to a Node dev server (port 3000)
-    # when that path doesn't exist on disk.
-    # Fix: patch _STATIC_PATH directly to sys._MEIPASS where data files ARE
-    # extracted to real disk locations by PyInstaller.
-    if getattr(sys, 'frozen', False):
-        import pathlib
-        try:
-            import streamlit.web.server.server as _st_server
-            _st_server._STATIC_PATH = pathlib.Path(sys._MEIPASS) / "streamlit" / "static"
-        except Exception:
-            pass
-
     # Call bootstrap.run() with version-compatible positional args and empty
     # flag_options (settings already applied above via set_option).
     import inspect
