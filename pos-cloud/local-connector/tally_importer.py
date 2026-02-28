@@ -153,14 +153,13 @@ def build_stockitems_xml(items: list) -> str:
              '    <REQUESTDATA>']
     for item in items:
         name = _esc(str(item.get("name", "")).strip())
-        unit = _esc(item.get("unit") or "Nos")
         if not name:
             continue
         lines += [
             f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
             f'        <STOCKITEM NAME="{name}" ACTION="Create">',
             f'          <NAME>{name}</NAME>',
-            f'          <BASEUNITS>{unit}</BASEUNITS>',
+            f'          <BASEUNITS>Nos</BASEUNITS>',
             f'        </STOCKITEM>',
             f'      </TALLYMESSAGE>',
         ]

@@ -78,9 +78,8 @@ def _friendly_error(msg: str) -> str:
     if "timeout" in lo:
         return "Tally is taking too long to respond. Make sure Tally is not busy."
     if "stock item" in lo or ("does not exist" in lo and "ledger" not in lo):
-        return (f"A product in this bill doesn't exist in Tally yet. "
-                f"Please click **Try Again** — it should fix itself automatically. "
-                f"If it keeps failing, create the product in Tally first.\n\n_{msg}_")
+        return (f"A product in this bill could not be added to Tally automatically. "
+                f"Please create the product in Tally first, then try saving again.\n\n_{msg}_")
     if "ledger" in lo or "not found" in lo:
         return (f"Tally could not find one of the accounts. "
                 f"The supplier may need to be created in Tally first.\n\n_{msg}_")
@@ -274,6 +273,12 @@ for uploaded in uploaded_files:
             with st.spinner("Saving to Tally…"):
                 tally_importer.ensure_stock_items(invoice.get("items", []))
                 result = tally_importer.post_to_tally(xml)
+                # If items were just created, one immediate retry is enough
+                if not result["success"] and (
+                    "stock item" in result["message"].lower() or
+                    "does not exist" in result["message"].lower()
+                ):
+                    result = tally_importer.post_to_tally(xml)
 
             st.session_state[result_key] = result
             _write_log(
