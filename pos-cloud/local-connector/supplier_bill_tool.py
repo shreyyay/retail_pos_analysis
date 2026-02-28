@@ -32,6 +32,10 @@ if _WORKER_FLAG in sys.argv:
     # This is the most reliable way — it works regardless of bootstrap.run()
     # signature changes across streamlit versions.
     import streamlit.config as _st_cfg
+    # CRITICAL: In a PyInstaller bundle, config.py.__file__ doesn't contain
+    # "site-packages", so streamlit auto-sets global.developmentMode=True, which
+    # redirects ALL traffic to localhost:3000 (Node dev server). Override first.
+    _st_cfg.set_option("global.developmentMode", False)
     _st_cfg.set_option("server.headless", True)
     _st_cfg.set_option("server.port", _PORT)
     _st_cfg.set_option("browser.gatherUsageStats", False)
