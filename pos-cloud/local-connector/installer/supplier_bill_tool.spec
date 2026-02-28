@@ -35,18 +35,34 @@ for pkg in ("streamlit", "pdfplumber", "groq",
 # ── Explicitly include streamlit's static UI assets ──────────────────────────
 # collect_all('streamlit') often misses the static/ dir in newer versions.
 # Without index.html, streamlit falls back to a Node dev server (port 3000).
-# _STATIC_PATH in server.py = Path(__file__).parent.parent/"static"
-# = streamlit/web/static/  (NOT streamlit/static/).
-# We find the actual directory containing index.html dynamically.
+#
+# CRITICAL: server.py is at streamlit/web/server/server.py.
+# It computes the static path as Path(__file__).parent.parent/"static"
+#   = streamlit/web/static/
+# BUT the installed package may have the React UI files at streamlit/static/
+# (older pip builds) rather than streamlit/web/static/.
+#
+# Strategy: find wherever index.html lives in the package, then bundle it to
+# BOTH its original location AND streamlit/web/static/ so that server.py's
+# inline path computation always finds index.html.
 import streamlit as _st_pkg
 import pathlib as _pl
 _st_pkg_dir = _pl.Path(_st_pkg.__file__).parent  # site-packages/streamlit/
 _found_static = False
 for _idx in _st_pkg_dir.rglob("static/index.html"):
-    _static_dir = _idx.parent          # e.g. streamlit/web/static/
+    _static_dir = _idx.parent          # directory containing index.html
     _rel = _static_dir.relative_to(_st_pkg_dir.parent)  # relative to site-packages/
-    datas += [(str(_static_dir), str(_rel).replace("\\", "/"))]
-    print(f"[spec] Added streamlit static: {_static_dir}  ->  {_rel}")
+    _rel_str = str(_rel).replace("\\", "/")
+    # Bundle to original location
+    datas += [(str(_static_dir), _rel_str)]
+    print(f"[spec] Added streamlit static (original):  {_static_dir}  ->  {_rel_str}")
+    # ALSO bundle to streamlit/web/static/ — where server.py (at web/server/server.py)
+    # always looks via Path(__file__).parent.parent/"static".
+    # This handles packages where the React UI is in streamlit/static/ (old layout)
+    # but server.py uses the new web/ layout.
+    if _rel_str != "streamlit/web/static":
+        datas += [(str(_static_dir), "streamlit/web/static")]
+        print(f"[spec] Added streamlit static (web/static): {_static_dir}  ->  streamlit/web/static")
     _found_static = True
 if not _found_static:
     print("[spec] WARNING: streamlit static/index.html not found — UI will be broken")
