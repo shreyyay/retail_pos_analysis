@@ -164,7 +164,7 @@ def build_stockitems_xml(items: list) -> str:
             continue
         lines += [
             f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
-            f'        <STOCKITEM NAME="{name}" ACTION="Create" ISMODIFY="No">',
+            f'        <STOCKITEM NAME="{name}" ACTION="Create">',
             f'          <NAME>{name}</NAME>',
             f'          <PARENT>Primary</PARENT>',
             f'          <BASEUNITS>Nos</BASEUNITS>',
@@ -175,22 +175,23 @@ def build_stockitems_xml(items: list) -> str:
     return "\n".join(lines)
 
 
-def ensure_stock_items(items: list) -> None:
+def ensure_stock_items(items: list) -> str:
     """
     Create any missing stock items in Tally before importing a voucher.
-    Errors are silently ignored — items that already exist cause a non-fatal
-    Tally response, and connection failures will be surfaced by post_to_tally().
+    Returns the raw Tally response text for diagnostic purposes ('' on network error).
+    Items that already exist cause a non-fatal duplicate response which is safe to ignore.
     """
     xml = build_stockitems_xml(items)
     try:
-        requests.post(
+        resp = requests.post(
             config.TALLY_URL,
             data=xml.encode("utf-8"),
             headers={"Content-Type": "application/xml"},
             timeout=15,
         )
+        return resp.text
     except Exception:
-        pass
+        return ""
 
 
 # ── Tally HTTP POST ───────────────────────────────────────────────────────────
