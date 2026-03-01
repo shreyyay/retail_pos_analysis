@@ -84,9 +84,10 @@ def _friendly_error(msg: str) -> str:
         return (f"Tally could not find one of the accounts. "
                 f"The supplier may need to be created in Tally first.\n\n_{msg}_")
     if "date" in lo and ("missing" in lo or "invalid" in lo):
-        return (f"The Bill Date field is missing or has an unreadable format. "
-                f"Please enter the date as **YYYY-MM-DD** (e.g. 2025-02-25) "
-                f"and try saving again.\n\n_{msg}_")
+        return (f"The bill date is outside Tally's active financial year. "
+                f"**In Tally:** press **F2** (Change Period) and set the period to include "
+                f"the bill date, then try saving again. "
+                f"If the Bill Date field above is blank, fill it in as YYYY-MM-DD first.\n\n_{msg}_")
     return msg
 
 

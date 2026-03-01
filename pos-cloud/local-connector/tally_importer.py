@@ -58,6 +58,7 @@ def build_purchase_xml(invoice: dict, with_inventory: bool = True) -> str:
              '        <TALLYMESSAGE xmlns:UDF="TallyUDF">',
              f'          <VOUCHER VCHTYPE="Purchase" ACTION="Create" OBJVIEW="{obj_view}">',
              f'            <DATE>{inv_date}</DATE>',
+             f'            <EFFECTIVEDATE>{inv_date}</EFFECTIVEDATE>',
              f'            <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>',
              f'            <VOUCHERNUMBER>{_esc(inv_no)}</VOUCHERNUMBER>',
              f'            <PARTYLEDGERNAME>{_esc(supplier)}</PARTYLEDGERNAME>',
