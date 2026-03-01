@@ -272,7 +272,9 @@ for uploaded in uploaded_files:
                 continue
 
             with st.spinner("Saving to Tally…"):
+                ledger_resp   = tally_importer.ensure_ledgers(invoice)
                 creation_resp = tally_importer.ensure_stock_items(invoice.get("items", []))
+                st.session_state[f"ledger_resp_{file_key}"]   = ledger_resp
                 st.session_state[f"creation_resp_{file_key}"] = creation_resp
                 result = tally_importer.post_to_tally(xml)
                 # If stock items still missing, fall back to accounting voucher (no inventory)
@@ -300,6 +302,10 @@ for uploaded in uploaded_files:
                 st.code(tally_importer.build_purchase_xml(invoice), language="xml")
             except Exception as e:
                 st.caption(f"Cannot show: {e}")
+            lr = st.session_state.get(f"ledger_resp_{file_key}", "")
+            if lr:
+                st.caption("Ledger creation response from Tally:")
+                st.code(lr, language="xml")
             cr = st.session_state.get(f"creation_resp_{file_key}", "")
             if cr:
                 st.caption("Stock item creation response from Tally:")

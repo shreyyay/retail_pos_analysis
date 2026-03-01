@@ -167,7 +167,7 @@ def build_stockitems_xml(items: list) -> str:
             f'        <STOCKITEM NAME="{name}" ACTION="Create">',
             f'          <NAME>{name}</NAME>',
             f'          <PARENT></PARENT>',
-            f'          <BASEUNITS>Nos</BASEUNITS>',
+            f'          <BASEUNITS></BASEUNITS>',
             f'        </STOCKITEM>',
             f'      </TALLYMESSAGE>',
         ]
@@ -182,6 +182,87 @@ def ensure_stock_items(items: list) -> str:
     Items that already exist cause a non-fatal duplicate response which is safe to ignore.
     """
     xml = build_stockitems_xml(items)
+    try:
+        resp = requests.post(
+            config.TALLY_URL,
+            data=xml.encode("utf-8"),
+            headers={"Content-Type": "application/xml"},
+            timeout=15,
+        )
+        return resp.text
+    except Exception:
+        return ""
+
+
+# ── Ledger auto-creation ──────────────────────────────────────────────────────
+
+def build_ledgers_xml(invoice: dict) -> str:
+    """
+    Build a Tally XML envelope that creates all ledgers required by the voucher:
+      Purchase (under Purchase Accounts), Input CGST/SGST/IGST (under Duties & Taxes),
+      and the supplier (under Sundry Creditors).
+    Safe to send even if ledgers already exist — Tally returns a non-fatal duplicate.
+    """
+    supplier = _esc(str(invoice.get("supplier_name", "")).strip())
+    cgst     = float(invoice.get("cgst") or 0)
+    sgst     = float(invoice.get("sgst") or 0)
+    igst     = float(invoice.get("igst") or 0)
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>',
+             '<ENVELOPE>',
+             '  <HEADER><TALLYREQUEST>Import Data</TALLYREQUEST></HEADER>',
+             '  <BODY><IMPORTDATA>',
+             '    <REQUESTDESC><REPORTNAME>All Masters</REPORTNAME></REQUESTDESC>',
+             '    <REQUESTDATA>']
+
+    # Purchase ledger (always needed for the voucher's Dr entry)
+    lines += [
+        '      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
+        '        <LEDGER NAME="Purchase" ACTION="Create">',
+        '          <NAME>Purchase</NAME>',
+        '          <PARENT>Purchase Accounts</PARENT>',
+        '        </LEDGER>',
+        '      </TALLYMESSAGE>',
+    ]
+
+    # GST input tax ledgers (only when the invoice has that tax)
+    for gst_name, amount in [
+        ("Input CGST", cgst),
+        ("Input SGST", sgst),
+        ("Input IGST", igst),
+    ]:
+        if amount > 0:
+            lines += [
+                f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
+                f'        <LEDGER NAME="{gst_name}" ACTION="Create">',
+                f'          <NAME>{gst_name}</NAME>',
+                f'          <PARENT>Duties &amp; Taxes</PARENT>',
+                f'        </LEDGER>',
+                f'      </TALLYMESSAGE>',
+            ]
+
+    # Supplier ledger (Sundry Creditor — the Cr entry)
+    if supplier:
+        lines += [
+            f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
+            f'        <LEDGER NAME="{supplier}" ACTION="Create">',
+            f'          <NAME>{supplier}</NAME>',
+            f'          <PARENT>Sundry Creditors</PARENT>',
+            f'        </LEDGER>',
+            f'      </TALLYMESSAGE>',
+        ]
+
+    lines += ['    </REQUESTDATA>', '  </IMPORTDATA></BODY>', '</ENVELOPE>']
+    return "\n".join(lines)
+
+
+def ensure_ledgers(invoice: dict) -> str:
+    """
+    Create all required ledgers in Tally before importing a voucher.
+    Returns the raw Tally response text for diagnostics ('' on network error).
+    Ledgers that already exist cause a non-fatal duplicate response.
+    """
+    xml = build_ledgers_xml(invoice)
     try:
         resp = requests.post(
             config.TALLY_URL,
