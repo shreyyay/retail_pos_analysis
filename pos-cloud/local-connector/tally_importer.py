@@ -344,11 +344,21 @@ def _parse_date(raw: str) -> str:
     """
     Parse a date string in any common format and return YYYYMMDD for Tally.
     Raises ValueError if the date cannot be parsed (caller shows error to user).
+
+    Year validation (2000-2099) prevents Python's %Y from silently accepting
+    2-digit years as year 25 AD (e.g. "25-02-25" → "00250225") which Tally
+    rejects as "Voucher date is missing".
     """
-    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d",
-                "%d-%b-%Y", "%d %b %Y", "%d %B %Y", "%Y/%m/%d"):
+    for fmt in (
+        "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d",
+        "%d-%b-%Y", "%d %b %Y", "%d %B %Y", "%Y/%m/%d",
+        "%d-%m-%y", "%d/%m/%y",   # 2-digit year fallbacks (%y → 2000-2068)
+    ):
         try:
-            return datetime.strptime(raw, fmt).strftime("%Y%m%d")
+            dt = datetime.strptime(raw, fmt)
+            if dt.year < 2000 or dt.year > 2099:
+                continue  # reject implausible years (e.g. year 25 AD from 2-digit input)
+            return dt.strftime("%Y%m%d")
         except ValueError:
             continue
     raise ValueError(
