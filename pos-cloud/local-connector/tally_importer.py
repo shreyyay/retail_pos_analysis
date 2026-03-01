@@ -9,6 +9,7 @@ Public functions:
 import re
 import requests
 import xml.etree.ElementTree as ET
+from datetime import datetime
 import config
 
 # ── XML Builder ───────────────────────────────────────────────────────────────
@@ -32,7 +33,7 @@ def build_purchase_xml(invoice: dict, with_inventory: bool = True) -> str:
     """
     supplier    = invoice["supplier_name"]
     inv_no      = invoice["invoice_number"]
-    inv_date    = invoice["invoice_date"].replace("-", "")  # YYYYMMDD
+    inv_date    = _parse_date(str(invoice.get("invoice_date") or "").strip())
     items       = invoice["items"]
     cgst        = float(invoice.get("cgst") or 0)
     sgst        = float(invoice.get("sgst") or 0)
@@ -337,6 +338,23 @@ def _parse_tally_response(xml_text: str) -> dict:
 
     # Generic fallback — if no error found, assume success
     return {"success": True, "message": "Import request sent to Tally"}
+
+
+def _parse_date(raw: str) -> str:
+    """
+    Parse a date string in any common format and return YYYYMMDD for Tally.
+    Raises ValueError if the date cannot be parsed (caller shows error to user).
+    """
+    for fmt in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y", "%Y%m%d",
+                "%d-%b-%Y", "%d %b %Y", "%d %B %Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(raw, fmt).strftime("%Y%m%d")
+        except ValueError:
+            continue
+    raise ValueError(
+        f"Cannot read the bill date '{raw}'. "
+        f"Please enter it as YYYY-MM-DD (e.g. 2025-02-25)."
+    )
 
 
 def _esc(text: str) -> str:
