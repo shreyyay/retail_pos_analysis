@@ -166,7 +166,7 @@ def build_stockitems_xml(items: list) -> str:
             f'      <TALLYMESSAGE xmlns:UDF="TallyUDF">',
             f'        <STOCKITEM NAME="{name}" ACTION="Create">',
             f'          <NAME>{name}</NAME>',
-            f'          <PARENT>Primary</PARENT>',
+            f'          <PARENT></PARENT>',
             f'          <BASEUNITS>Nos</BASEUNITS>',
             f'        </STOCKITEM>',
             f'      </TALLYMESSAGE>',
