@@ -327,18 +327,30 @@ def _parse_tally_response(xml_text: str) -> dict:
     if errors:
         return {"success": False, "message": "; ".join(errors)}
 
-    # Check CREATED count
-    created = root.findtext(".//CREATED") or root.findtext("CREATED")
-    if created and int(created) > 0:
+    # Check CREATED / ALTERED count
+    created = int(root.findtext(".//CREATED") or root.findtext("CREATED") or 0)
+    altered = int(root.findtext(".//ALTERED") or root.findtext("ALTERED") or 0)
+    if created > 0:
         return {"success": True, "message": f"{created} voucher(s) created in Tally"}
+    if altered > 0:
+        return {"success": True, "message": f"{altered} voucher(s) updated in Tally"}
 
     # Check for any error text
     error_el = root.find(".//ERROR") or root.find("ERROR")
     if error_el is not None and error_el.text:
         return {"success": False, "message": error_el.text.strip()}
 
-    # Generic fallback — if no error found, assume success
-    return {"success": True, "message": "Import request sent to Tally"}
+    # CREATED=0, no explicit error — Tally silently rejected the voucher.
+    # Most common cause: bill date is outside Tally's active financial year.
+    return {
+        "success": False,
+        "message": (
+            "Tally received the bill but did not save it (created 0 vouchers). "
+            "The bill date may be outside Tally's active period — "
+            "in Tally, click the date range shown at the top of the screen "
+            "and set it to include the bill date, then try saving again."
+        )
+    }
 
 
 def _parse_date(raw: str) -> str:
