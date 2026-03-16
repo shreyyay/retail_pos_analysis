@@ -5,7 +5,11 @@ User-friendly: plain language, auto-reads PDF on upload, no technical jargon.
 """
 
 import csv
+import io
+import json
+import logging
 import os
+import sys
 from datetime import datetime
 import streamlit as st
 import pandas as pd
@@ -100,9 +104,60 @@ def _tally_status():
         return False
 
 
+def _get_last_sync() -> str:
+    try:
+        base = (os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
+                else os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(base, "last_sync.json")
+        with open(path) as f:
+            d = json.load(f).get("last_sync_date", "")
+        return datetime.strptime(d, "%Y-%m-%d").strftime("%d %b %Y") if d else ""
+    except Exception:
+        return ""
+
+
+def _run_sync() -> dict:
+    import tally_connector
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s – %(message)s", datefmt="%H:%M:%S"))
+    logging.getLogger().addHandler(handler)
+    success = True
+    try:
+        tally_connector.run()
+    except SystemExit as e:
+        success = (e.code == 0)
+    except Exception as e:
+        success = False
+        logging.getLogger("sync").error("Error: %s", e)
+    finally:
+        logging.getLogger().removeHandler(handler)
+    return {"success": success, "log": buf.getvalue() or "(no output)"}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Header
+# Sidebar — Sync Now
 # ─────────────────────────────────────────────────────────────────────────────
+
+with st.sidebar:
+    st.header("🔄 Sync Sales to Cloud")
+    last = _get_last_sync()
+    if last:
+        st.caption(f"Last sync: **{last}**")
+    else:
+        st.caption("Last sync: _never_")
+    st.caption(f"Store: `{config.STORE_ID or 'not configured'}`")
+
+    if st.button("▶ Sync Now", type="primary", use_container_width=True):
+        with st.spinner("Syncing Tally data to cloud…"):
+            res = _run_sync()
+        if res["success"]:
+            st.success("✅ Sync complete!")
+            st.rerun()
+        else:
+            st.error("❌ Sync failed. See log below.")
+        with st.expander("Sync log", expanded=not res["success"]):
+            st.code(res["log"], language="text")
 
 st.title("🧾 Supplier Bill → Tally")
 st.caption("Upload your supplier's PDF bill — we'll read it and save it directly into Tally.")
@@ -249,6 +304,21 @@ for uploaded in uploaded_files:
     # ── Step 3 — Save to Tally ────────────────────────────────────────────────
 
     st.subheader("③ Save to Tally")
+
+    # Duplicate-bill warning (check log for same bill number with prior success)
+    inv_no_now = invoice.get("invoice_number", "").strip()
+    if inv_no_now and result_key not in st.session_state:
+        log_df_check = _load_log()
+        if log_df_check is not None and "Bill No." in log_df_check.columns:
+            prior_ok = log_df_check[
+                (log_df_check["Bill No."] == inv_no_now) &
+                (log_df_check["Status"].str.contains("Saved", na=False))
+            ]
+            if not prior_ok.empty:
+                st.warning(
+                    f"⚠️ Bill **{inv_no_now}** was already saved to Tally on "
+                    f"{prior_ok.iloc[0]['Date']}. Save again only if you need to correct it."
+                )
 
     if result_key in st.session_state:
         result = st.session_state[result_key]

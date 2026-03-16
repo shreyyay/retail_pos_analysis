@@ -70,7 +70,7 @@ def build_purchase_xml(invoice: dict, with_inventory: bool = True) -> str:
         for item in items:
             name   = item["name"]
             qty    = item["quantity"]
-            unit   = item.get("unit") or "Pcs"
+            unit   = _esc(item.get("unit") or "Pcs")
             rate   = item["rate"]
             amount = item["amount"]
             lines += [
